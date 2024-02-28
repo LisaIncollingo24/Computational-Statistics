@@ -1,0 +1,33 @@
+\usepackage{fvextra}
+\usepackage{mathtools}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{ragged2e}
+\usepackage{biblatex}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{lscape}
+\usepackage{amsmath}
+\usepackage{setspace}
+\usepackage{amsbsy}
+\setstretch{1.2}
+% If you use beamer only pass "xcolor=table" option, i.e. \documentclass[xcolor=table]{beamer}
+\usepackage[normalem]{ulem}
+\useunder{\uline}{\ul}{}
+\usepackage{lscape}
+\usepackage{longtable}
+% \renewcommand{\contentsname}{Index}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
+\usepackage{titlesec}
+
+% Impostazione dimensioni titoli di livello 1 (titoli paragrafi)
+\titleformat*{\section}{\fontsize{14pt}{1.2em}\bfseries}
+
+% Impostazione dimensioni titoli di livello 2 (sottotitoli)
+\titleformat*{\subsection}{\fontsize{12pt}{1.2em}\bfseries}
+
+% Impostazione dimensioni note a piè di pagina
+\let\oldfootnotesize\footnotesize
+\renewcommand{\footnotesize}{\fontsize{10pt}{1.2em}\oldfootnotesize}
