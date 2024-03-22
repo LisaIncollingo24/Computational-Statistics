@@ -1,0 +1,249 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+date: '2024-02-27'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE)
+
+```
+
+# Exercise 1
+
+```{r}
+# Load required libraries
+library(ggplot2)
+library(gridExtra)
+
+# Set a seed for reproducibility
+set.seed(123)
+
+# Define variables
+n <- 500  # Number of observations
+p <- 200  # Number of predictors
+num_replications <- 10000  # Number of replications
+p_values_global_null <- numeric(num_replications)
+p_values_nonzero <- numeric(num_replications)
+
+# Function to generate AR(1) data
+generate_ar1 <- function(n, rho) {
+  ar_values <- numeric(n)
+  ar_values[1] <- rnorm(1)  # First value from a normal distribution
+  for (i in 2:n) {
+    ar_values[i] <- rho * ar_values[i - 1] + rnorm(1, 0)  # AR(1) process
+  }
+  return(ar_values)
+}
+
+# Simulation under the global null hypothesis for β1
+for (i in 1:num_replications) {
+  X <- sapply(1:p, function(j) generate_ar1(n, 0.5))  # Each column of X is an AR(1)
+  Y <- rbinom(n, 1, 0.5)  # Bernoulli response with probability 0.5
+  fit <- glm(Y ~ X, family = binomial)  # Fit a logistic regression
+  p_values_global_null[i] <- coef(summary(fit))[2, "Pr(>|z|)"]  # Save the p-value for β1
+}
+
+# Simulation with 20 nonzero coefficients for β1
+for (i in 1:num_replications) {
+  X <- sapply(1:p, function(j) generate_ar1(n, 0.5))  # Each column of X is an AR(1)
+  beta <- c(0, rep(0.1, 20), rep(0, p - 21))  # β1 = 0, 20 coefficients at 0.1, the rest at 0
+  logits <- X %*% beta  # Calculate logits
+  probs <- exp(logits) / (1 + exp(logits))  # Convert logits to probabilities
+  Y <- rbinom(n, 1, probs)  # Generate binary response based on calculated probabilities
+  fit <- glm(Y ~ X, family = binomial)  # Fit a logistic regression
+  p_values_nonzero[i] <- coef(summary(fit))[2, "Pr(>|z|)"]  # Save the p-value for β1
+}
+
+# Plot creation
+df_global_null <- data.frame(p_values = p_values_global_null)
+df_nonzero <- data.frame(p_values = p_values_nonzero)
+
+# Plot for global null hypothesis
+p1 <- ggplot(df_global_null, aes(x = p_values)) +
+  geom_histogram(bins = 20, fill = 'blue', color = 'black') +
+  ggtitle("Global Null, AR(1) Design for β1") +
+  theme_minimal()
+
+# Plot for scenario with 20 nonzero coefficients
+p2 <- ggplot(df_nonzero, aes(x = p_values)) +
+  geom_histogram(bins = 20, fill = 'red', color = 'black') +
+  ggtitle("20 Nonzero Coefficients, AR(1)") +
+  theme_minimal()
+
+# Display both plots side by side
+grid.arrange(p1, p2, ncol = 2)
+```
+
+
+# Exercise 3:
+
+## First scenario:
+
+```{r}
+library(knockoff)
+
+set.seed(42) # Set seed for reproducibility
+
+# Simulation parameters
+n <- 500  # Number of observations
+p <- 200  # Number of variables
+
+# Function to generate AR(1) data
+generate_ar1_matrix <- function(n, p, rho) {
+  X <- matrix(nrow = n, ncol = p)
+  for (j in 1:p) {
+    X[,j] <- generate_ar1(n, rho)
+  }
+  return(X)
+}
+
+generate_ar1 <- function(n, rho) {
+  ar_values <- numeric(n)
+  ar_values[1] <- rnorm(1)
+  for (i in 2:n) {
+    ar_values[i] <- rho * ar_values[i - 1] + rnorm(1, mean=0 , sd=20) 
+  }
+  return(ar_values)
+}
+
+# Generate AR(1) predictors
+X <- generate_ar1_matrix(n, p, 0.5)
+Y <- rbinom(n, 1, 0.5)  # Bernoulli response with probability 0.5
+
+beta <- rep(0, p)
+
+fdr_levels <- seq(0.05, 0.25, by=0.01)
+
+fdp <- function(selected) {
+  sum(beta[selected] == 0) / max(1, length(selected))
+}
+
+
+for(fdr in fdr_levels) {
+  result <- knockoff.filter(X, Y, fdr=fdr)
+  fdp_value <- fdp(result$selected)
+  cat(sprintf("FDR: %.2f, FDP: %.4f, Selected Variables: %s\n", fdr, fdp_value, toString(result$selected)))
+}
+
+```
+
+
+
+## Second scenario:
+
+```{r}
+set.seed(42) # Set seed for reproducibility
+n <- 500  # Number of observations
+p <- 200  # Number of variables
+
+X <- generate_ar1_matrix(n, p, 0.5)
+
+# Define the true coefficients (first 20 non-null, the rest null)
+beta <- c(rep(0, 1), rep(0.08, 20), rep(0, p - 21))
+
+# Generate responses based on a logistic model
+logits <- X %*% beta
+probs <- exp(logits) / (1 + exp(logits))
+Y <- rbinom(n, 1, probs)
+```
+
+
+```{r}
+for(fdr in fdr_levels) {
+  result <- knockoff.filter(X, Y, fdr=fdr)
+  fdp_value <- fdp(result$selected)
+  cat(sprintf("FDR: %.2f, FDP: %.4f, Selected Variables: %s\n", fdr, fdp_value, toString(result$selected)))
+}
+```
+
+
+```{r}
+fdr_level <- 0.25  # Set the False Discovery Rate (FDR) level
+
+# Initialize counter to track how many times the first variable is selected
+count_first_variable_selected <- 0
+
+# Loop over 100 iterations
+for(i in 1:100) {
+  result <- knockoff.filter(X, Y, fdr=fdr_level)  # Apply the knockoff filter with the specified FDR level
+  fdp_value <- fdp(result$selected)  # Calculate the False Discovery Proportion (FDP)
+  
+  # Check if the first variable (assuming variables are numbered starting from 1) is selected
+  if(1 %in% result$selected) {
+    count_first_variable_selected <- count_first_variable_selected + 1
+  }
+}
+
+# Print the total number of times the first variable was selected out of 100 iterations
+cat(sprintf("The first variable was selected %d times out of 100 iterations with an FDR of 0.25.\n", count_first_variable_selected))
+```
+
+
+
+#exercise 5
+
+```{r}
+# Check if "BiocManager" is installed; if not, install it
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("ALL")  # Install the "ALL" package
+library(ALL)  # Load the "ALL" library
+
+```
+
+
+```{r}
+data("ALL")  # Load the "ALL" dataset
+```
+
+
+```{r}
+# Select two subgroups for the response variable
+subgroups <- c("BCR/ABL", "NEG")
+
+# Filter the data for these subgroups
+ALL_sub <- ALL[, ALL$mol.biol %in% subgroups]
+
+# Expression data
+X <- exprs(ALL_sub)
+
+# Response variable (0 for NEG, 1 for BCR/ABL)
+y <- as.numeric(ALL_sub$mol.biol == "BCR/ABL")
+```
+
+
+```{r}
+library(knockoff)  # Load the "knockoff" library
+X_transposed <- t(X)  # Transpose X to match the expected format
+print(dim(X_transposed))
+
+# Select a subset of 111 observations and 200 covariates
+X_subset <- X_transposed[1:111, 1:200]  # Assume we have at least 111 samples and 200 genes
+
+# Ensure y is consistent with the selected observations
+y_subset <- y[1:111]
+
+# Apply the knockoff method
+set.seed(123) # For reproducibility
+result <- knockoff.filter(X_subset, y_subset, fdr = 0.5)
+
+# Display the results
+print(result$selected)
+```
+
+```{r}
+X_df <- as.data.frame(X_subset)  # Convert X_subset to a data frame
+
+# Add y_subset to the data frame for the formula
+X_df$y <- y_subset
+
+# Fit a logistic regression model
+model_logistic <- glm(y ~ ., data = X_df, family = binomial, control = list(maxit = 1000))
+summary(model_logistic)  # Display the model summary
+```
+
